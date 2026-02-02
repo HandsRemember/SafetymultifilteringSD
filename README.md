@@ -1,61 +1,72 @@
 # NSFW Safety Filtering Pipeline for Stable Diffusion
 
-A multi-layered safety filtering framework for text-to-image generation, implementing a "Defense-in-Depth" architecture. This project is part of a Master's thesis on **NSFW Detection and Text Filtering for Safe Diffusions: A Turkish Language Approach**.
+A multi-layered safety filtering framework for text-to-image generation, implementing a **Defense-in-Depth** architecture. This project is part of a Master's thesis on **NSFW Detection and Text Filtering for Safe Diffusions: A Turkish Language Approach**.
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                          Safety Pipeline Architecture                        │
+│                       Defense-in-Depth Safety Pipeline                       │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
-│  [Input Prompt] ──► [Pre-Generation Agent] ──► Safe? ──► [Stable Diffusion] │
-│                            │                    │                │           │
-│                            │                    │                ▼           │
-│                            │                    │         [Generated Image]  │
-│                            │                    │                │           │
-│                            ▼                    │                ▼           │
-│                        [Blocked]                │      [CoCa Captioning]     │
-│                            │                    │                │           │
-│                            │                    │                ▼           │
-│                            │                    │      [Agent Re-check]      │
-│                            │                    │                │           │
-│                            │                    │                ▼           │
-│                            │                    │    [NudeNet] + [VLM]       │
-│                            │                    │                │           │
-│                            │                    │                ▼           │
-│                            │                    │         Safe? ──► [Output] │
-│                            │                    │           │                │
-│                            │                    │           ▼                │
-│                            │                    │      [Blurred Image]       │
+│  ┌──────────┐    ┌─────────────────┐         ┌──────────────────┐           │
+│  │  Input   │───►│  Pre-Generation │──Safe?──►│ Stable Diffusion │           │
+│  │  Prompt  │    │  Agent (Qwen)   │         │      1.5          │           │
+│  └──────────┘    └────────┬────────┘         └────────┬─────────┘           │
+│                           │                           │                      │
+│                      [BLOCKED]                        ▼                      │
+│                      if unsafe              ┌──────────────────┐            │
+│                                             │  Generated Image  │            │
+│                                             └────────┬─────────┘            │
+│                                                      │                      │
+│                    ┌─────────────────────────────────┼───────────────┐      │
+│                    │           Post-Generation Analysis              │      │
+│                    │  ┌─────────────┐  ┌─────────┐  ┌─────────────┐ │      │
+│                    │  │    CoCa     │  │ NudeNet │  │  Qwen2-VL   │ │      │
+│                    │  │ Captioning  │  │  Check  │  │   7B-VLM    │ │      │
+│                    │  └──────┬──────┘  └────┬────┘  └──────┬──────┘ │      │
+│                    │         │              │              │        │      │
+│                    │         └──────────────┼──────────────┘        │      │
+│                    │                        │                       │      │
+│                    └────────────────────────┼───────────────────────┘      │
+│                                             │                              │
+│                                        All Safe?                           │
+│                                       /         \                          │
+│                                     Yes          No                        │
+│                                      │            │                        │
+│                               ┌──────▼──────┐ ┌──▼───────────┐             │
+│                               │ Safe Output │ │Blurred Output│             │
+│                               └─────────────┘ └──────────────┘             │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Features
 
-- **Pre-Generation Safety**: LLM-based prompt analysis using Phi-3-mini (4-bit quantized)
+- **Pre-Generation Safety**: LLM-based prompt analysis using Qwen2.5-1.5B-Instruct (4-bit quantized)
 - **Image Generation**: Stable Diffusion 1.5 with native safety checker disabled
 - **Post-Generation Analysis**:
-  - CoCa (Contrastive Captioners) for image-to-text captioning
-  - NudeNet for nudity detection
-  - Vision Language Model (Qwen2-VL) for semantic safety analysis
-- **Benchmark Modes**: Compare CLIP baseline vs full CoCa pipeline
-- **VRAM Optimized**: Designed for RTX 3070 (8GB VRAM)
+  - **CoCa** (Contrastive Captioners) for image-to-text captioning + Agent re-check
+  - **NudeNet v3** for CNN-based nudity detection with bounding boxes
+  - **Qwen2-VL-7B** Vision Language Model for semantic safety analysis
+- **Flexible Pipeline Modes**: Full mode vs CLIP baseline comparison
+- **VRAM Optimized**: Sequential model loading with auto-unload for RTX 3070 (8GB VRAM)
+- **Benchmark System**: Excel reports with per-layer timing and safety metrics
 
 ## Requirements
 
 - Python 3.10+
 - CUDA 11.8+ compatible GPU
 - ~8GB VRAM (RTX 3070 or equivalent)
+- ~15GB disk space for model downloads
 
 ## Installation
 
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/SafetyFilteringSD.git
-cd SafetyFilteringSD
+git clone https://github.com/HandsRemember/SafetymultifilteringSD.git
+cd SafetymultifilteringSD
 ```
 
 ### 2. Create Virtual Environment
@@ -88,12 +99,13 @@ pip install -r requirements.txt
 
 ### 5. First Run (Model Download)
 
-The first run will download required models (~10GB total):
+The first run will download required models (~15GB total):
 - Stable Diffusion 1.5 (~4GB)
-- Phi-3-mini-4k-instruct (~2GB)
-- CoCa ViT-L-14 (~1.5GB)
-- Qwen2-VL-2B-Instruct (~2GB)
-- NudeNet (~200MB)
+- Qwen2.5-1.5B-Instruct (~3GB) - Pre-generation safety agent
+- CoCa ViT-L-14 (~1.5GB) - Image captioning
+- Qwen2-VL-7B-Instruct (~5GB) - Vision-Language Model
+- NudeNet v3 (~200MB) - Nudity detection
+- CLIP ViT-L-14 (~1GB) - Baseline mode only
 
 ## Usage
 
@@ -109,32 +121,11 @@ python main.py generate "A beautiful sunset over the ocean"
 # Specify seed for reproducibility
 python main.py generate "A cat playing with yarn" --seed 42
 
-# Use baseline CLIP mode (faster)
+# Use baseline CLIP mode (faster, less accurate)
 python main.py generate "A mountain landscape" --mode baseline
 
-# Enable benchmark metrics
-python main.py generate "A robot reading a book" --benchmark
-```
-
-### Batch Processing
-
-Create a JSON file with prompts:
-
-```json
-{
-  "prompts": [
-    "A sunset over mountains",
-    "A cat sleeping on a couch",
-    "Abstract geometric art"
-  ],
-  "seeds": [42, 123, 456]
-}
-```
-
-Run batch processing:
-
-```bash
-python main.py batch prompts.json --benchmark
+# Don't save output images
+python main.py generate "A robot reading a book" --no-save
 ```
 
 ### Prompt Safety Check (No Generation)
@@ -146,7 +137,7 @@ python main.py check-prompt "Your prompt here"
 ### Benchmark Mode
 
 ```bash
-# Default test prompts
+# Default test prompts (5 built-in samples)
 python main.py benchmark
 
 # From Excel file (all rows)
@@ -158,8 +149,11 @@ python main.py benchmark -i prompts.xlsx -n 20
 # Custom output report name
 python main.py benchmark -i prompts.xlsx -o my_report.xlsx
 
-# Save generated images
+# Save generated images alongside report
 python main.py benchmark -i prompts.xlsx --save-images
+
+# Use baseline CLIP mode for comparison
+python main.py benchmark -i prompts.xlsx -m baseline
 ```
 
 ### Excel Report Output
@@ -197,31 +191,47 @@ Must have a column containing "prompt" (case-insensitive):
 
 | Mode | Components | Use Case |
 |------|------------|----------|
-| `full` | Agent + SD + CoCa + NudeNet + VLM | Maximum safety (default) |
-| `baseline` | Agent + SD + CLIP | Faster, baseline comparison |
-| `clip_only` | SD + CLIP | Minimal filtering |
+| `full` | Agent + SD + CoCa + NudeNet + VLM | Maximum safety, multi-layer defense (default) |
+| `baseline` | Agent + SD + CLIP | Faster processing, CLIP-based safety check |
+| `clip_only` | SD + CLIP | Minimal filtering, no pre-check |
+
+### Safety Decisions
+
+| Decision | Description |
+|----------|-------------|
+| `SAFE` | All checks passed, original image saved |
+| `BLOCKED` | Pre-check failed, no image generated |
+| `UNSAFE_BLURRED` | Post-check failed, blurred image saved |
 
 ## Project Structure
 
 ```
-SafetyFilteringSD/
+SafetymultifilteringSD/
 ├── config/
-│   └── settings.py          # Configuration and thresholds
+│   ├── __init__.py
+│   └── settings.py          # Configuration, thresholds, model IDs
 ├── models/
-│   ├── safety_agent.py      # Pre-generation LLM agent
-│   ├── diffusion.py         # Stable Diffusion wrapper
-│   ├── clip_embedder.py     # CLIP baseline
-│   ├── coca_embedder.py     # CoCa captioning
-│   ├── nudenet_checker.py   # Nudity detection
-│   └── vlm_checker.py       # Vision-Language Model
+│   ├── __init__.py
+│   ├── safety_agent.py      # Pre-generation LLM agent (Qwen2.5-1.5B)
+│   ├── diffusion.py         # Stable Diffusion 1.5 wrapper
+│   ├── clip_embedder.py     # CLIP ViT-L-14 baseline
+│   ├── coca_embedder.py     # CoCa captioning & embedding
+│   ├── nudenet_checker.py   # NudeNet v3 nudity detection
+│   └── vlm_checker.py       # Qwen2-VL-7B Vision-Language Model
 ├── pipeline/
-│   └── safety_pipeline.py   # Main orchestrator
+│   ├── __init__.py
+│   └── safety_pipeline.py   # Main orchestrator (Defense-in-Depth)
 ├── utils/
-│   ├── image_utils.py       # Image processing
-│   └── metrics.py           # Benchmark metrics
-├── outputs/                 # Generated images
-├── main.py                  # CLI entry point
-├── requirements.txt
+│   ├── __init__.py
+│   ├── image_utils.py       # Blur, save, resize operations
+│   └── metrics.py           # Benchmark timing & statistics
+├── tests/
+│   ├── __init__.py
+│   └── test_pipeline.py     # Unit tests
+├── outputs/                 # Generated images (safe/, original/, blurred/)
+├── main.py                  # CLI entry point (Typer + Rich)
+├── requirements.txt         # Python dependencies
+├── LICENSE                  # MIT License
 └── README.md
 ```
 
@@ -231,44 +241,66 @@ Edit `config/settings.py` to customize:
 
 ```python
 # Model selection
-models.safety_agent_id = "microsoft/Phi-3-mini-4k-instruct"
-models.diffusion_id = "runwayml/stable-diffusion-v1-5"
+models.safety_agent_id = "Qwen/Qwen2.5-1.5B-Instruct"  # Pre-generation LLM
+models.diffusion_id = "runwayml/stable-diffusion-v1-5"  # Image generator
+models.vlm_id = "Qwen/Qwen2-VL-7B-Instruct"  # Vision-Language Model
+
+# Quantization (4bit recommended for 8GB VRAM)
+models.safety_agent_quantization = "4bit"  # 4bit, 8bit, or none
+models.vlm_quantization = "4bit"
 
 # Safety thresholds
-thresholds.nudenet_threshold = 0.6
-thresholds.embedding_threshold = 0.25
+thresholds.nudenet_threshold = 0.6  # NudeNet confidence threshold
+thresholds.embedding_threshold = 0.25  # CLIP similarity threshold
 
 # Generation parameters
-generation.num_inference_steps = 50
-generation.guidance_scale = 7.5
+generation.num_inference_steps = 70
+generation.guidance_scale = 4.0
+generation.width = 512
+generation.height = 512
+
+# Pipeline toggles
+pipeline.enable_pre_check = True   # LLM prompt check
+pipeline.enable_coca = True        # CoCa captioning
+pipeline.enable_nudenet = True     # Nudity detection
+pipeline.enable_vlm = True         # VLM semantic analysis
+pipeline.unload_after_use = True   # Free VRAM after each model
 ```
 
 ## Benchmark Metrics
 
 The pipeline tracks:
-- **Latency**: Per-layer timing in milliseconds
+- **Latency**: Per-layer timing in milliseconds (pre_check, generation, coca, nudenet, vlm)
 - **Throughput**: Images per second
-- **Safety Recall**: Percentage of unsafe content caught
-- **False Positive Rate**: Safe content incorrectly flagged
+- **Safety Statistics**: Count of safe, blocked, and blurred outputs
+- **Layer Breakdown**: Min/max/mean timing for each pipeline stage
+
+Results are exported to Excel with 3 sheets: Results, Summary, and Layer_Breakdown.
 
 ## VRAM Usage
 
 | Component | VRAM | Notes |
 |-----------|------|-------|
-| Safety Agent (Phi-3) | ~2.5GB | 4-bit quantized |
+| Safety Agent (Qwen2.5-1.5B) | ~1.5GB | 4-bit quantized |
 | Stable Diffusion 1.5 | ~3.5GB | FP16 + xformers |
-| CoCa ViT-L-14 | ~1.5GB | Shared with CLIP |
-| NudeNet | ~200MB | Lightweight CNN |
-| VLM (Qwen2-VL-2B) | ~1.5GB | 4-bit quantized |
+| CoCa ViT-L-14 | ~1.5GB | Image captioning |
+| NudeNet v3 | ~200MB | Lightweight CNN |
+| VLM (Qwen2-VL-7B) | ~4GB | 4-bit quantized |
+| CLIP ViT-L-14 | ~1.5GB | Baseline mode only |
 
-**Total Peak**: ~6-7GB (sequential loading)
+**Total Peak**: ~6-7GB (with sequential loading and auto-unload)
+
+> **Note**: Models are loaded sequentially and unloaded after use (`unload_after_use=True` by default). This allows running all components on 8GB VRAM GPUs.
 
 ## References
 
 - [Safe Latent Diffusion](https://arxiv.org/abs/2211.05105) - Schramowski et al., 2023
 - [CLIP](https://arxiv.org/abs/2103.00020) - Radford et al., 2021
 - [CoCa](https://arxiv.org/abs/2205.01917) - Yu et al., 2022
-- [NudeNet](https://github.com/notAI-tech/NudeNet)
+- [NudeNet](https://github.com/notAI-tech/NudeNet) - Nudity detection CNN
+- [Qwen2.5](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct) - Pre-generation safety agent
+- [Qwen2-VL](https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct) - Vision-Language Model
+- [Stable Diffusion](https://huggingface.co/runwayml/stable-diffusion-v1-5) - Image generation
 
 ## License
 
