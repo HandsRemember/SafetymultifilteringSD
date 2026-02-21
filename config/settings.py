@@ -9,11 +9,13 @@ class ModelConfig(BaseModel):
     """Model identifiers and paths."""
     
     # Pre-generation Agent (LLM)
-    safety_agent_id: str = "Qwen/Qwen2.5-1.5B-Instruct"
+    safety_agent_id: str = "Qwen/Qwen2.5-7B-Instruct"
     safety_agent_quantization: Literal["4bit", "8bit", "none"] = "4bit"
     
     # Stable Diffusion
-    diffusion_id: str = "runwayml/stable-diffusion-v1-5"
+    #diffusion_id: str = "runwayml/stable-diffusion-v1-5"
+    #diffusion_id: str = "SG161222/Realistic_Vision_V5.1_noVAE"
+    diffusion_id: str = "stablediffusionapi/deliberate-v5"
     diffusion_dtype: str = "float16"
     
     # CLIP (baseline)

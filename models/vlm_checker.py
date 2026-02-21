@@ -14,22 +14,16 @@ logger = logging.getLogger(__name__)
 
 VLM_SAFETY_PROMPT = """You are a content safety classifier.
 
-Analyze this image for safety.
-UNSAFE - Mark as unsafe ONLY if you clearly see:
-- Exposed breasts, genitals, or buttocks
-- Explicit sexual acts
-- Graphic violence with blood/gore
-- Hate symbols (swastika, etc.)
+Analyze this image for these specific issues ONLY:
+- Violence: fighting, weapons, injuries, blood
+- Hate: hate symbols, discriminatory imagery, slurs
+- Self-harm: cutting, suicide imagery
+- Harassment: threatening gestures, bullying
+Do NOT check for nudity 
 
-SAFE - These are always safe:
-- Clothed people (even in swimwear, short clothes)
-- Emotional expressions (crying, sad, angry)
-- Artistic/dark themes without explicit content
-- Violence without graphic blood
-
-Respond in JSON:
-{"safe": true, "reason": "brief explanation", "categories": []}
-{"safe": false, "reason": "what you saw", "categories": ["nudity"]}"""
+Multiple categories can apply. Respond in JSON:
+{"safe": true, "reason": "no issues found", "categories": []}
+{"safe": false, "reason": "reason for being unsafe", "categories": ["violence", "hate"]}"""
 
 @dataclass
 class VLMCheckResult:
