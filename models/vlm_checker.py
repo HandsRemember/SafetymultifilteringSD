@@ -12,18 +12,19 @@ from config import settings
 logger = logging.getLogger(__name__)
 
 
-VLM_SAFETY_PROMPT = """You are a content safety classifier.
+VLM_SAFETY_PROMPT = """You are an image safety classifier. Ignore nudity (handled separately).
 
-Analyze this image for these specific issues ONLY:
-- Violence: fighting, weapons, injuries, blood
-- Hate: hate symbols, discriminatory imagery, slurs
-- Self-harm: cutting, suicide imagery
-- Harassment: threatening gestures, bullying
-Do NOT check for nudity 
+Check ONLY for:
+1. violence - fighting, weapons, blood, injuries, gore
+2. hate - hate symbols, racist imagery, discriminatory content
+3. self_harm - cutting, suicide, self-injury
+4. harassment - threatening, bullying, intimidation
 
-Multiple categories can apply. Respond in JSON:
-{"safe": true, "reason": "no issues found", "categories": []}
-{"safe": false, "reason": "reason for being unsafe", "categories": ["violence", "hate"]}"""
+Answer with ONLY this JSON format, no other text:
+{"safe": true, "reason": "no issues", "categories": []}
+
+If unsafe, list ALL matching categories:
+{"safe": false, "reason": "what you see", "categories": ["violence", "hate"]}"""
 
 @dataclass
 class VLMCheckResult:
@@ -134,7 +135,6 @@ class VLMChecker:
             generated_ids = self.model.generate(
                 **inputs,
                 max_new_tokens=150,
-                temperature=0.1,
                 do_sample=False,
             )
         
@@ -155,12 +155,15 @@ class VLMChecker:
         """Parse VLM response into VLMCheckResult."""
         import json
         
+        # Clean markdown code fences if present
+        cleaned = response.replace("```json", "").replace("```", "").strip()
+        
         # Try JSON parsing first
         try:
-            start = response.find("{")
-            end = response.rfind("}") + 1
+            start = cleaned.find("{")
+            end = cleaned.rfind("}") + 1
             if start != -1 and end > start:
-                json_str = response[start:end]
+                json_str = cleaned[start:end]
                 data = json.loads(json_str)
                 
                 return VLMCheckResult(
@@ -171,16 +174,30 @@ class VLMChecker:
         except (json.JSONDecodeError, KeyError) as e:
             logger.warning(f"JSON parse failed, using fallback: {e}")
         
-        # Fallback: Text-based analysis
-        response_lower = response.lower()
+        # Fallback: Text-based analysis for VLM task categories
+        response_lower = cleaned.lower()
         
-        # Check for unsafe indicators
-        unsafe_words = ["unsafe", "nudity", "nude", "violence", "blood", "gore", 
-                       "explicit", "sexual", "hate", "harmful", "not safe"]
-        safe_words = ["safe", "clean", "appropriate", "no unsafe", "nothing unsafe"]
+        unsafe_words = ["violence", "blood", "gore", "weapon", "injury",
+                       "hate", "racist", "discriminat", "self-harm", "self_harm",
+                       "suicide", "cutting", "harassment", "threaten", "bully",
+                       "unsafe", "not safe"]
+        safe_words = ["safe", "no issues", "no violence", "no hate",
+                     "clean", "appropriate", "nothing unsafe"]
         
         unsafe_count = sum(1 for w in unsafe_words if w in response_lower)
         safe_count = sum(1 for w in safe_words if w in response_lower)
+        
+        # Detect specific categories from response
+        detected_categories = []
+        category_keywords = {
+            "violence": ["violence", "blood", "gore", "weapon", "injury", "fighting"],
+            "hate": ["hate", "racist", "discriminat", "swastika"],
+            "self_harm": ["self-harm", "self_harm", "suicide", "cutting"],
+            "harassment": ["harassment", "threaten", "bully", "intimidat"],
+        }
+        for cat, keywords in category_keywords.items():
+            if any(kw in response_lower for kw in keywords):
+                detected_categories.append(cat)
         
         if safe_count > unsafe_count:
             return VLMCheckResult(
@@ -192,10 +209,10 @@ class VLMChecker:
             return VLMCheckResult(
                 is_safe=False,
                 reason=response[:100],
-                categories=["detected"],
+                categories=detected_categories or ["detected"],
             )
         
-        # Default to safe if unclear (reduce false positives)
+        # Default to safe if unclear
         return VLMCheckResult(
             is_safe=True,
             reason=f"Fallback: {response[:80]}",
