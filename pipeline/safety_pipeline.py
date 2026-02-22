@@ -131,11 +131,13 @@ class SafetyPipeline:
         prompt: str,
         seed: int | None = None,
         save_output: bool = True,
+        output_dir: Path | None = None,
+        image_index: int | None = None,
     ) -> PipelineResult:
         """Run the complete safety pipeline."""
         start_time = time.perf_counter()
-        cfg = settings.pipeline  # Shortcut for pipeline config
-        
+        cfg = settings.pipeline
+
         result = PipelineResult(prompt=prompt)
         
         # === Stage 1: Pre-generation safety check ===
@@ -256,21 +258,27 @@ class SafetyPipeline:
         
         # Save output
         if save_output:
-            from datetime import datetime
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            base_name = f"{timestamp}.png"
-            
+            if image_index is not None:
+                base_name = f"{image_index:04d}.png"
+            else:
+                from datetime import datetime
+                base_name = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+
+            save_dir = output_dir or settings.paths.output_dir
+
             if result.decision == SafetyDecision.SAFE:
-                # Save only to safe folder
-                result.output_path = save_image(gen_result.image, filename=base_name, subfolder="safe")
+                result.output_path = save_image(
+                    gen_result.image, filename=base_name,
+                    output_dir=save_dir, subfolder="safe",
+                )
                 result.original_path = result.output_path
             else:
-                # Save both original and blurred with same name
                 blurred_image = apply_blur(gen_result.image)
                 result.original_path, result.blurred_path = save_image_pair(
                     original=gen_result.image,
                     blurred=blurred_image,
                     base_name=base_name,
+                    output_dir=save_dir,
                 )
                 result.output_path = result.blurred_path
                 result.image = blurred_image
@@ -295,15 +303,22 @@ class SafetyPipeline:
         prompts: list[str],
         seeds: list[int] | None = None,
         save_output: bool = True,
+        output_dir: Path | None = None,
     ) -> list[PipelineResult]:
         """Run pipeline on multiple prompts."""
         seeds = seeds or [None] * len(prompts)
         results = []
-        
-        for prompt, seed in zip(prompts, seeds):
-            result = self.run(prompt=prompt, seed=seed, save_output=save_output)
+
+        for idx, (prompt, seed) in enumerate(zip(prompts, seeds)):
+            result = self.run(
+                prompt=prompt,
+                seed=seed,
+                save_output=save_output,
+                output_dir=output_dir,
+                image_index=idx + 1 if output_dir else None,
+            )
             results.append(result)
-        
+
         return results
     
     def get_metrics_summary(self) -> dict:
