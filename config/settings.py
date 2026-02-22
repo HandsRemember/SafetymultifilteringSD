@@ -27,7 +27,8 @@ class ModelConfig(BaseModel):
     coca_pretrained: str = "laion2b_s13b_b90k"
     
     # VLM
-    vlm_id: str = "Qwen/Qwen2-VL-7B-Instruct"
+    #vlm_id: str = "Qwen/Qwen2-VL-7B-Instruct"
+    vlm_id: str = "llava-hf/llava-v1.6-mistral-7b-hf"
     vlm_quantization: Literal["4bit", "8bit", "none"] = "4bit"
 
 
