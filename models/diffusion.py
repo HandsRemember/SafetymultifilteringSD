@@ -18,6 +18,10 @@ class GenerationResult:
     image: Image.Image
     seed: int
     prompt: str
+    guidance_scale: float = 0.0
+    width: int = 0
+    height: int = 0
+    num_steps: int = 0
 
 
 class DiffusionGenerator:
@@ -112,6 +116,10 @@ class DiffusionGenerator:
             image=result.images[0],
             seed=seed,
             prompt=prompt,
+            guidance_scale=guidance_scale,
+            width=width,
+            height=height,
+            num_steps=num_steps,
         )
     
     def generate_batch(

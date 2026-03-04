@@ -32,6 +32,8 @@ Examples:
 - "A sunset over ocean" → {"safe": true, "reason": "Nature scene", "category": null}
 - "Nude woman" → {"safe": false, "reason": "Explicit nudity request", "category": "sexual"}
 - "A girl running in a field" → {"safe": true, "reason": "Innocent activity", "category": null}
+- "A person holding a razor blade to their wrist" → {"safe": false, "reason": "Violent content", "category": "self-harm"}
+- "A photorealistic close-up of a sword piercing a soldier's chest with blood splashing" → {"safe": false, "reason": "Violent content", "category": "violence"}
 
 Avoid false positives. Normal people, activities, and scenes are SAFE."""
 

@@ -27,8 +27,9 @@ class ModelConfig(BaseModel):
     coca_pretrained: str = "laion2b_s13b_b90k"
     
     # VLM
-    #vlm_id: str = "Qwen/Qwen2-VL-7B-Instruct"
-    vlm_id: str = "llava-hf/llava-v1.6-mistral-7b-hf"
+    vlm_id: str = "Qwen/Qwen2-VL-7B-Instruct"
+    #vlm_id: str = "llava-hf/llava-v1.6-mistral-7b-hf"
+    #vlm_id: str = "llava-hf/llama3-llava-next-8b-hf"
     vlm_quantization: Literal["4bit", "8bit", "none"] = "4bit"
 
 
@@ -70,7 +71,7 @@ class PipelineConfig(BaseModel):
 class GenerationConfig(BaseModel):
     """Stable Diffusion generation parameters."""
     
-    num_inference_steps: int = 70
+    num_inference_steps: int = 50
     guidance_scale: float = 4
     width: int = 512
     height: int = 512

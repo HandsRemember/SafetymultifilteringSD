@@ -29,8 +29,20 @@ PROGRESS_FILENAME = "progress.jsonl"
 # Input Loading (Excel + CSV)
 # =============================================================================
 
-def load_prompts_from_file(file_path: Path) -> list[str]:
-    """Load prompts from Excel (.xlsx/.xls) or CSV file."""
+_EXTRA_COLUMNS = {
+    "sd_seed": int,
+    "sd_guidance_scale": float,
+    "sd_image_width": int,
+    "sd_image_height": int,
+}
+
+
+def load_prompts_from_file(file_path: Path) -> list[dict]:
+    """Load prompts (and optional generation params) from Excel or CSV.
+    
+    Returns list of dicts with keys: prompt, sd_seed, sd_guidance_scale,
+    sd_image_width, sd_image_height.  Missing columns default to None.
+    """
     suffix = file_path.suffix.lower()
 
     if suffix in (".xlsx", ".xls"):
@@ -44,7 +56,28 @@ def load_prompts_from_file(file_path: Path) -> list[str]:
     if not prompt_col:
         raise ValueError(f"No 'prompt' column found. Columns: {list(df.columns)}")
 
-    return df[prompt_col].dropna().astype(str).tolist()
+    col_map: dict[str, str] = {}
+    lower_cols = {c.lower(): c for c in df.columns}
+    for key in _EXTRA_COLUMNS:
+        if key.lower() in lower_cols:
+            col_map[key] = lower_cols[key.lower()]
+
+    rows: list[dict] = []
+    for _, df_row in df.iterrows():
+        prompt_val = df_row[prompt_col]
+        if pd.isna(prompt_val):
+            continue
+
+        entry: dict = {"prompt": str(prompt_val)}
+        for key, cast in _EXTRA_COLUMNS.items():
+            if key in col_map:
+                val = df_row[col_map[key]]
+                entry[key] = cast(val) if pd.notna(val) else None
+            else:
+                entry[key] = None
+        rows.append(entry)
+
+    return rows
 
 
 # =============================================================================
@@ -69,9 +102,14 @@ def _result_to_row(result: PipelineResult, index: int) -> dict:
     if result.nudenet_result and result.nudenet_result.triggered_classes:
         nudenet_regions = ", ".join(result.nudenet_result.triggered_classes)
 
+    gen = result.generation
     return {
         "index": index,
         "prompt": result.prompt,
+        "sd_seed": gen.seed if gen else None,
+        "sd_guidance_scale": gen.guidance_scale if gen else None,
+        "sd_width": gen.width if gen else None,
+        "sd_height": gen.height if gen else None,
         "pre_check_safe": result.pre_check.is_safe if result.pre_check else None,
         "pre_check_reason": result.pre_check.reason if result.pre_check else None,
         "image_path": str(result.output_path) if result.output_path else None,
@@ -144,7 +182,8 @@ def create_benchmark_report(rows: list[dict], output_path: Path) -> Path:
 
     # Sheet 1: Detailed Results (timings kolonu haric)
     detail_cols = [
-        "index", "prompt", "pre_check_safe", "pre_check_reason",
+        "index", "prompt", "sd_seed", "sd_guidance_scale", "sd_width", "sd_height",
+        "pre_check_safe", "pre_check_reason",
         "image_path", "decision", "time_ms", "coca_caption",
         "vlm_safe", "vlm_reason", "nudenet_safe", "nudenet_exposed_regions",
     ]
@@ -199,6 +238,9 @@ def create_benchmark_report(rows: list[dict], output_path: Path) -> Path:
 def generate(
     prompt: str = typer.Argument(..., help="Text prompt"),
     seed: Optional[int] = typer.Option(None, "-s", "--seed"),
+    width: Optional[int] = typer.Option(None, "-W", "--width", help="Image width (default: settings)"),
+    height: Optional[int] = typer.Option(None, "-H", "--height", help="Image height (default: settings)"),
+    scale: Optional[float] = typer.Option(None, "--scale", help="Guidance scale / CFG (default: settings)"),
     mode: str = typer.Option("full", "-m", "--mode"),
     no_save: bool = typer.Option(False, "--no-save"),
 ):
@@ -207,7 +249,14 @@ def generate(
 
     with console.status("[green]Processing..."):
         pipeline = SafetyPipeline(mode=mode)
-        result = pipeline.run(prompt=prompt, seed=seed, save_output=not no_save)
+        result = pipeline.run(
+            prompt=prompt,
+            seed=seed,
+            guidance_scale=scale,
+            width=width,
+            height=height,
+            save_output=not no_save,
+        )
 
     _print_result(result)
 
@@ -237,19 +286,19 @@ def benchmark(
             console.print("[red]--resume requires --input-file to know the full prompt list[/red]")
             raise typer.Exit(1)
 
-        all_prompts = load_prompts_from_file(input_file)
+        all_prompt_rows = load_prompts_from_file(input_file)
         if num_samples:
-            all_prompts = all_prompts[:num_samples]
+            all_prompt_rows = all_prompt_rows[:num_samples]
 
-        if completed_count >= len(all_prompts):
+        if completed_count >= len(all_prompt_rows):
             console.print(f"[green]Already completed all {completed_count} prompts![/green]")
             _finalize_report(completed_rows, benchmark_dir, output_report)
             return
 
-        remaining_prompts = all_prompts[completed_count:]
+        remaining_rows = all_prompt_rows[completed_count:]
         start_index = completed_count + 1
 
-        console.print(f"[yellow]Resuming from #{start_index} ({completed_count}/{len(all_prompts)} done)[/yellow]")
+        console.print(f"[yellow]Resuming from #{start_index} ({completed_count}/{len(all_prompt_rows)} done)[/yellow]")
         console.print(f"[dim]Images → {benchmark_dir}[/dim]\n")
 
     else:
@@ -258,37 +307,39 @@ def benchmark(
             if not input_file.exists():
                 console.print(f"[red]File not found: {input_file}[/red]")
                 raise typer.Exit(1)
-            all_prompts = load_prompts_from_file(input_file)
-            console.print(f"[green]Loaded {len(all_prompts)} prompts from {input_file.name}[/green]")
+            all_prompt_rows = load_prompts_from_file(input_file)
+            console.print(f"[green]Loaded {len(all_prompt_rows)} prompts from {input_file.name}[/green]")
         else:
-            all_prompts = [
-                "A sunset over the ocean",
-                "A cat playing with yarn",
-                "Portrait in a garden",
-                "Abstract geometric art",
-                "Mountain landscape with snow",
+            all_prompt_rows = [
+                {"prompt": p} for p in [
+                    "A sunset over the ocean",
+                    "A cat playing with yarn",
+                    "Portrait in a garden",
+                    "Abstract geometric art",
+                    "Mountain landscape with snow",
+                ]
             ]
 
         if num_samples:
-            all_prompts = all_prompts[:num_samples]
+            all_prompt_rows = all_prompt_rows[:num_samples]
 
-        if not all_prompts:
+        if not all_prompt_rows:
             console.print("[red]No prompts to process[/red]")
             raise typer.Exit(1)
 
         benchmark_dir = create_benchmark_dir()
-        remaining_prompts = all_prompts
+        remaining_rows = all_prompt_rows
         start_index = 1
         completed_rows = []
 
-        console.print(f"[bold]Running {len(all_prompts)} prompts in '{mode}' mode[/bold]")
+        console.print(f"[bold]Running {len(all_prompt_rows)} prompts in '{mode}' mode[/bold]")
         console.print(f"[dim]Images → {benchmark_dir}[/dim]\n")
 
     # ---- Run pipeline with checkpoint ----
     settings.benchmark_mode = True
     progress_file = benchmark_dir / PROGRESS_FILENAME
     pipeline = SafetyPipeline(mode=mode)
-    total_prompts = len(all_prompts)
+    total_prompts = len(all_prompt_rows)
 
     with Progress(
         SpinnerColumn(),
@@ -299,11 +350,15 @@ def benchmark(
     ) as progress:
         task = progress.add_task("Benchmark", total=total_prompts, completed=start_index - 1)
 
-        for i, prompt in enumerate(remaining_prompts):
+        for i, prompt_row in enumerate(remaining_rows):
             current_index = start_index + i
 
             result = pipeline.run(
-                prompt=prompt,
+                prompt=prompt_row["prompt"],
+                seed=prompt_row.get("sd_seed"),
+                guidance_scale=prompt_row.get("sd_guidance_scale"),
+                width=prompt_row.get("sd_image_width"),
+                height=prompt_row.get("sd_image_height"),
                 save_output=True,
                 output_dir=benchmark_dir,
                 image_index=current_index,

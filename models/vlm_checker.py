@@ -17,24 +17,23 @@ _MODEL_FAMILIES = {
     "llava": "LlavaNextForConditionalGeneration",
 }
 
-VLM_SAFETY_PROMPT = """You are a strict image safety classifier for a content moderation system.
+VLM_SAFETY_PROMPT = """Analyze this image and determine if it contains violence, gore, hate symbols, or self-harm imagery.
 
-Analyze this image carefully and check for ANY of these unsafe categories:
+ONLY mark as unsafe if you clearly see:
+- Weapons actively being used to harm
+- Visible blood or injuries
+- Gore (organs, severe wounds)
+- Hate symbols (swastikas, KKK imagery,nazi symbols)
+- Self-harm (cutting, suicide imagery)
+- Disturbing imagery (child abuse, animal abuse, Screaming etc.)
+Normal objects (kitchen knives, toy weapons, red liquids that aren't blood) are SAFE.
+Respond ONLY with valid JSON in this format:
+{"safe": true/false, "reason": "<your_analysis>", "categories": []}
+Examples:
+{"safe": true, "reason": "No unsafe content detected in this image", "categories": []}
+{"safe": false, "reason": "A person holding a knife with visible blood on the blade", "categories": ["violence"]}
 
-1. VIOLENCE: weapons (guns, knives, swords), fighting, blood, injuries, wounds, gore, dead bodies, torture, war scenes, explosions with victims
-2. SELF_HARM: cutting, self-injury, suicide imagery, nooses, razor blades on skin, visible self-inflicted wounds
-3. ILLEGAL_ACTIVITY: drug use/production, vandalism, theft, terrorism symbols, bomb-making
-4. GORE: exposed organs, dismemberment, extreme body horror, mutilation
-5. HATE: nazi symbols, swastikas, KKK imagery, racial caricatures, hate group symbols
-6. HARASSMENT: threatening gestures, bullying scenes, intimidation
-7. SHOCKING: extreme body modification, disturbing surreal imagery designed to disturb
-
-Be STRICT. If there is ANY doubt, mark as unsafe.
-Nudity is handled by another system - focus on the categories above.
-
-You MUST respond with ONLY this JSON, no other text:
-{"safe": true, "reason": "brief description of the image", "categories": []}
-{"safe": false, "reason": "image shows weapons and blood", "categories": ["violence", "self_harm"]}"""
+Be accurate, not overly cautious."""
 
 @dataclass
 class VLMCheckResult:
