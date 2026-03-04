@@ -130,6 +130,9 @@ class SafetyPipeline:
         self,
         prompt: str,
         seed: int | None = None,
+        guidance_scale: float | None = None,
+        width: int | None = None,
+        height: int | None = None,
         save_output: bool = True,
         output_dir: Path | None = None,
         image_index: int | None = None,
@@ -161,7 +164,13 @@ class SafetyPipeline:
         
         # === Stage 2: Image generation ===
         t0 = time.perf_counter()
-        gen_result = self.diffusion.generate(prompt=prompt, seed=seed)
+        gen_result = self.diffusion.generate(
+            prompt=prompt,
+            seed=seed,
+            guidance_scale=guidance_scale,
+            width=width,
+            height=height,
+        )
         result.generation = gen_result
         result.image = gen_result.image
         result.timings["generation"] = (time.perf_counter() - t0) * 1000
@@ -300,19 +309,20 @@ class SafetyPipeline:
     
     def run_batch(
         self,
-        prompts: list[str],
-        seeds: list[int] | None = None,
+        prompts: list[dict],
         save_output: bool = True,
         output_dir: Path | None = None,
     ) -> list[PipelineResult]:
-        """Run pipeline on multiple prompts."""
-        seeds = seeds or [None] * len(prompts)
+        """Run pipeline on multiple prompt dicts (keys: prompt, sd_seed, sd_guidance_scale, sd_image_width, sd_image_height)."""
         results = []
 
-        for idx, (prompt, seed) in enumerate(zip(prompts, seeds)):
+        for idx, row in enumerate(prompts):
             result = self.run(
-                prompt=prompt,
-                seed=seed,
+                prompt=row["prompt"],
+                seed=row.get("sd_seed"),
+                guidance_scale=row.get("sd_guidance_scale"),
+                width=row.get("sd_image_width"),
+                height=row.get("sd_image_height"),
                 save_output=save_output,
                 output_dir=output_dir,
                 image_index=idx + 1 if output_dir else None,
