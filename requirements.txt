@@ -1,47 +1,48 @@
 # NSFW Safety Filtering Pipeline - Dependencies
-# RTX 3070 (8GB VRAM) optimized
-# Python 3.10+
+# Python 3.10+ required
+# Optimized for RTX 3070 (8GB VRAM) with sequential model loading
 
-# Core ML Framework
+# ── Core ML Framework ────────────────────────────────────────────────────────
+# Install PyTorch separately with the correct CUDA version before running pip install:
+#   CUDA 11.8: pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+#   CUDA 12.1: pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
 torch>=2.1.0
 torchvision>=0.16.0
 
-# Diffusion Models
+# ── Diffusion Models ─────────────────────────────────────────────────────────
 diffusers>=0.25.0
 accelerate>=0.25.0
-xformers>=0.0.23
+xformers>=0.0.23          # optional but recommended for VRAM efficiency
 
-# Transformers & LLM
-transformers>=4.36.0
-bitsandbytes>=0.41.0
-sentencepiece>=0.1.99
+# ── Transformers & Quantization ───────────────────────────────────────────────
+transformers>=4.40.0      # 4.40+ required for Qwen2-VL support
+bitsandbytes>=0.41.0      # 4-bit / 8-bit quantization
+sentencepiece>=0.1.99     # tokenizer dependency
 
-# CLIP & CoCa (OpenCLIP)
+# ── CLIP & CoCa (OpenCLIP) ───────────────────────────────────────────────────
 open_clip_torch>=2.24.0
 
-# NudeNet
+# ── NudeNet ──────────────────────────────────────────────────────────────────
 nudenet>=3.4.2
 
-# Image Processing
+# ── Image Processing ─────────────────────────────────────────────────────────
 Pillow>=10.0.0
 opencv-python>=4.8.0
-
-# Utilities
 numpy>=1.24.0
-tqdm>=4.66.0
-pydantic>=2.5.0
+
+# ── Data / Reporting ─────────────────────────────────────────────────────────
 pandas>=2.0.0
-openpyxl>=3.1.0
+openpyxl>=3.1.0           # Excel report generation
 
-# Logging
-loguru>=0.7.2
+# ── Configuration ────────────────────────────────────────────────────────────
+pydantic>=2.5.0
 
-# CLI
+# ── CLI & Display ────────────────────────────────────────────────────────────
 typer>=0.9.0
 rich>=13.7.0
 
-# Testing
-pytest>=7.4.0
+# ── Qwen2-VL utilities ───────────────────────────────────────────────────────
+qwen-vl-utils>=0.0.8      # required for Qwen2-VL-7B-Instruct image processing
 
-# Optional: Qwen2-VL dependencies
-qwen-vl-utils>=0.0.8
+# ── Testing ──────────────────────────────────────────────────────────────────
+pytest>=7.4.0

@@ -12,12 +12,12 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
-# Unsafe concept embeddings
-# Kaynak: Rando et al. (2022) "Red-Teaming the Stable Diffusion Safety Filter"
-# Table 1 — reverse-engineered SD v1.4 safety filter concepts (17 unsafe + special care)
-# + ek kavramlar: gore, violence, bloody, disturbing (SD'nin kapsamadığı alanlar)
+# Unsafe concept list for CLIP similarity matching.
+# Source: Rando et al. (2022) "Red-Teaming the Stable Diffusion Safety Filter",
+# Table 1 — reverse-engineered SD v1.4 safety filter (17 unsafe + 3 special care concepts).
+# Extended with violence/gore/disturbing categories that the original SD filter omitted.
 UNSAFE_CONCEPTS = [
-    # --- Cinsel içerik (SD orijinal kavramlar, Table 1) ---
+    # Sexual content (original SD v1.4 concepts, Table 1)
     "sexual",
     "nude",
     "sex",
@@ -32,12 +32,12 @@ UNSAFE_CONCEPTS = [
     "vagina",
     "areola",
     "naked person",
-    # --- Şiddet / gore (SD'de yok — bu pipeline'ın ek katkısı) ---
+    # Violence / gore (not covered by SD — added by this pipeline)
     "gore",
     "violence",
     "bloody",
     "disturbing",
-    # --- Çocuk koruması (SD special care concepts, Table 1) ---
+    # Child protection (SD special care concepts, Table 1)
     "young child",
     "young girl",
 ]
