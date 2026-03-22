@@ -12,18 +12,34 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
-# Unsafe concept embeddings (similar to SD native safety checker)
+# Unsafe concept embeddings
+# Kaynak: Rando et al. (2022) "Red-Teaming the Stable Diffusion Safety Filter"
+# Table 1 — reverse-engineered SD v1.4 safety filter concepts (17 unsafe + special care)
+# + ek kavramlar: gore, violence, bloody, disturbing (SD'nin kapsamadığı alanlar)
 UNSAFE_CONCEPTS = [
+    # --- Cinsel içerik (SD orijinal kavramlar, Table 1) ---
+    "sexual",
+    "nude",
+    "sex",
     "naked",
-    "nude", 
     "nsfw",
-    "pornographic",
-    "sexual content",
-    "explicit",
+    "porn",
+    "18+",
+    "explicit content",
+    "uncensored",
+    "nipples",
+    "naked breast",
+    "vagina",
+    "areola",
+    "naked person",
+    # --- Şiddet / gore (SD'de yok — bu pipeline'ın ek katkısı) ---
     "gore",
     "violence",
     "bloody",
     "disturbing",
+    # --- Çocuk koruması (SD special care concepts, Table 1) ---
+    "young child",
+    "young girl",
 ]
 
 
@@ -34,6 +50,11 @@ class CLIPCheckResult:
     max_similarity: float
     matched_concept: str | None
     all_similarities: dict[str, float]
+    triggered_concepts: list[str] = None  # threshold'u geçen tüm class'lar
+
+    def __post_init__(self):
+        if self.triggered_concepts is None:
+            self.triggered_concepts = []
 
 
 class CLIPEmbedder:
@@ -137,36 +158,54 @@ class CLIPEmbedder:
         image: Image.Image,
         threshold: float | None = None,
     ) -> CLIPCheckResult:
-        """Check image safety against unsafe concepts."""
+        """Check image safety against unsafe concepts.
+
+        Her kavram için settings.thresholds.clip_per_class_thresholds içindeki
+        eşik kullanılır. Kavram orada tanımlanmamışsa global embedding_threshold
+        devreye girer. threshold parametresi verilirse tüm class'lar için
+        bu değer geçerli olur (per-class ayarları geçersiz kılınır).
+        """
         if not self._loaded:
             self.load()
-        
-        threshold = threshold or settings.thresholds.embedding_threshold
-        
+
+        global_threshold = threshold or settings.thresholds.embedding_threshold
+        per_class = settings.thresholds.clip_per_class_thresholds
+
         # Get image embedding
         image_input = self.preprocess(image).unsqueeze(0).to(self.device)
-        
+
         with torch.no_grad():
             image_features = self.model.encode_image(image_input)
             image_features = image_features / image_features.norm(dim=-1, keepdim=True)
-        
+
         # Compute similarities with all unsafe concepts
         similarities = (image_features @ self._concept_embeddings.T).squeeze(0)
         similarities = similarities.cpu().numpy()
-        
+
         # Build results
         all_similarities = {
-            concept: float(sim) 
+            concept: float(sim)
             for concept, sim in zip(UNSAFE_CONCEPTS, similarities)
         }
-        
+
         max_idx = np.argmax(similarities)
         max_similarity = float(similarities[max_idx])
-        matched_concept = UNSAFE_CONCEPTS[max_idx] if max_similarity > threshold else None
-        
+
+        # Her kavram için kendi threshold'unu kullan, yoksa global'e düş
+        triggered = [
+            UNSAFE_CONCEPTS[i]
+            for i, sim in enumerate(similarities)
+            if float(sim) > (
+                per_class.get(UNSAFE_CONCEPTS[i], global_threshold)
+                if threshold is None   # manuel threshold verilmemişse per-class geçerli
+                else global_threshold
+            )
+        ]
+
         return CLIPCheckResult(
-            is_safe=max_similarity <= threshold,
+            is_safe=len(triggered) == 0,
             max_similarity=max_similarity,
-            matched_concept=matched_concept,
+            matched_concept=triggered[0] if triggered else None,
             all_similarities=all_similarities,
+            triggered_concepts=triggered,
         )
