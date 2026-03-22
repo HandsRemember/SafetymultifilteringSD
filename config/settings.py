@@ -46,14 +46,15 @@ class ThresholdConfig(BaseModel):
         "ANUS_EXPOSED",
     ]
     
-    # CLIP global fallback threshold (per-class tanımlanmamışsa kullanılır)
+    # CLIP global fallback threshold (used when a concept has no per-class entry)
     embedding_threshold: float = Field(default=0.28, ge=0.0, le=1.0)
 
-    # CLIP per-class threshold'lar — her kavram için ayrı eşik
-    # Referans: Rando et al. (2022) Table 1 — SD v1.4 safety filter orijinal threshold'ları
-    # Cinsel içerik: 0.18–0.22 (SD orijinali), Şiddet/gore: 0.26–0.30 (false positive riski yüksek)
+    # Per-concept CLIP thresholds.
+    # Reference: Rando et al. (2022) "Red-Teaming the Stable Diffusion Safety Filter", Table 1.
+    # Sexual content uses original SD v1.4 thresholds (0.18–0.22).
+    # Violence/gore uses slightly higher values to reduce false positives from action/horror scenes.
     clip_per_class_thresholds: dict[str, float] = {
-        # Cinsel içerik — SD orijinal threshold'larına yakın (0.18–0.22)
+        # Sexual content — aligned with original SD v1.4 thresholds (0.18–0.22)
         "sexual":           0.18,
         "nude":             0.19,
         "sex":              0.20,
@@ -68,14 +69,14 @@ class ThresholdConfig(BaseModel):
         "vagina":           0.19,
         "areola":           0.20,
         "naked person":     0.22,
-        # Şiddet / gore — daha yüksek (aksiyon/korku sahneleri false positive verebilir)
+        # Violence / gore — higher values to reduce false positives
         "gore":             0.19,
         "violence":         0.20,
         "bloody":           0.18,
         "disturbing":       0.20,
         "shocking":         0.21,
         "horrifying":       0.20,
-        # Çocuk koruması — SD special care threshold'ları (agresif, düşük)
+        # Child protection — SD special care thresholds (aggressive, low)
         "young child":      0.19,
         "young girl":       0.20,
     }
@@ -87,20 +88,20 @@ class ThresholdConfig(BaseModel):
 class PipelineConfig(BaseModel):
     """Pipeline stage toggles for flexible testing."""
     
-    # Stage toggles — her biri bağımsız olarak açılıp kapatılabilir
-    enable_pre_check: bool = True       # SafetyAgent LLM pre-check
-    enable_coca: bool = True            # CoCa captioning + re-check
-    enable_clip: bool = True           # CLIP similarity check (default kapalı, True yapınca aktif)
-    enable_nudenet: bool = True         # NudeNet nudity detection
-    enable_vlm: bool = True             # VLM semantic analysis
-    
+    # Stage toggles — each component is independently enabled/disabled
+    enable_pre_check: bool = True    # LLM prompt safety check (SafetyAgent)
+    enable_coca: bool = True         # CoCa image captioning + agent re-check
+    enable_clip: bool = True         # CLIP concept similarity check (off by default; set True to activate)
+    enable_nudenet: bool = True      # NudeNet nudity detection
+    enable_vlm: bool = True          # VLM semantic safety analysis
+
     # Memory management
-    unload_after_use: bool = True       # Unload each model after use to save VRAM
-    force_gc: bool = True               # Force garbage collection after unload
+    unload_after_use: bool = True    # Unload each model after use to save VRAM
+    force_gc: bool = True            # Force garbage collection after unload
 
     @classmethod
     def preset_full(cls) -> "PipelineConfig":
-        """Agent + CoCa + NudeNet + VLM (varsayılan, maksimum güvenlik)."""
+        """Agent + CoCa + NudeNet + VLM (default, maximum safety)."""
         return cls(
             enable_pre_check=True,
             enable_coca=True,
@@ -111,7 +112,7 @@ class PipelineConfig(BaseModel):
 
     @classmethod
     def preset_baseline(cls) -> "PipelineConfig":
-        """Agent + CLIP (hızlı, temel güvenlik karşılaştırması)."""
+        """Agent + CLIP (fast, embedding-based safety comparison)."""
         return cls(
             enable_pre_check=True,
             enable_clip=True,
@@ -122,7 +123,7 @@ class PipelineConfig(BaseModel):
 
     @classmethod
     def preset_clip_only(cls) -> "PipelineConfig":
-        """Sadece CLIP (pre-check yok, minimum filtreleme)."""
+        """CLIP only — no pre-check, minimal filtering."""
         return cls(
             enable_pre_check=False,
             enable_clip=True,
