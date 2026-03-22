@@ -202,10 +202,14 @@ class CLIPEmbedder:
             )
         ]
 
+        # matched_concept: threshold geçilmişse ilk triggered class,
+        # geçilmemişse yine de en yüksek benzerlik veren class (bilgi amaçlı)
+        matched_concept = triggered[0] if triggered else UNSAFE_CONCEPTS[max_idx]
+
         return CLIPCheckResult(
             is_safe=len(triggered) == 0,
             max_similarity=max_similarity,
-            matched_concept=triggered[0] if triggered else None,
+            matched_concept=matched_concept,
             all_similarities=all_similarities,
             triggered_concepts=triggered,
         )

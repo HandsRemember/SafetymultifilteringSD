@@ -38,8 +38,15 @@ PRESETS: dict[str, type] = {
 _VALID_MODES = ", ".join(PRESETS.keys())
 
 
-def _resolve_pipeline(mode: str) -> SafetyPipeline:
-    """Resolve --mode string to a PipelineConfig preset and create SafetyPipeline."""
+def _resolve_pipeline(mode: str | None) -> SafetyPipeline:
+    """Resolve --mode string to a PipelineConfig preset and create SafetyPipeline.
+
+    If mode is None, settings.pipeline is used directly so that enable_*
+    flags in settings.py take effect without being overridden by a preset.
+    """
+    if mode is None:
+        return SafetyPipeline(pipeline_config=settings.pipeline)
+
     if mode not in PRESETS:
         console.print(
             f"[red]Invalid mode: '{mode}'. Valid modes: {_VALID_MODES}[/red]"
@@ -257,7 +264,7 @@ def generate(
     width: Optional[int] = typer.Option(None, "-W", "--width"),
     height: Optional[int] = typer.Option(None, "-H", "--height"),
     scale: Optional[float] = typer.Option(None, "--scale", help="Guidance scale / CFG"),
-    mode: str = typer.Option("full", "-m", "--mode", help=f"Preset: {_VALID_MODES}"),
+    mode: Optional[str] = typer.Option(None, "-m", "--mode", help=f"Preset: {_VALID_MODES}. If omitted, settings.py enable_* flags are used directly."),
     no_save: bool = typer.Option(False, "--no-save"),
 ):
     """Generate a single image from prompt and run safety filters."""
@@ -280,7 +287,7 @@ def generate(
 @app.command()
 def check(
     path: Path = typer.Argument(..., help="Image file or directory"),
-    mode: str = typer.Option("full", "-m", "--mode", help=f"Preset: {_VALID_MODES}"),
+    mode: Optional[str] = typer.Option(None, "-m", "--mode", help=f"Preset: {_VALID_MODES}. If omitted, settings.py enable_* flags are used directly."),
     no_save: bool = typer.Option(False, "--no-save"),
     output_dir: Optional[Path] = typer.Option(None, "-o", "--output-dir"),
 ):
@@ -313,7 +320,7 @@ def check(
         raise typer.Exit(1)
 
     console.print(
-        Panel(f"[cyan]{len(image_paths)} image(s)[/cyan] · mode: [bold]{mode}[/bold]", title="Check")
+        Panel(f"[cyan]{len(image_paths)} image(s)[/cyan] · mode: [bold]{mode or 'settings.py'}[/bold]", title="Check")
     )
 
     pipeline = _resolve_pipeline(mode)
@@ -343,7 +350,7 @@ def benchmark(
         help="Directory of existing images. When provided, generation is skipped and only post-checks run."
     ),
     num_samples: Optional[int] = typer.Option(None, "-n", "--samples"),
-    mode: str = typer.Option("full", "-m", "--mode", help=f"Preset: {_VALID_MODES}"),
+    mode: Optional[str] = typer.Option(None, "-m", "--mode", help=f"Preset: {_VALID_MODES}. If omitted, settings.py enable_* flags are used directly."),
     output_report: Optional[Path] = typer.Option(None, "-o", "--output"),
     resume: Optional[Path] = typer.Option(None, "--resume", "-r", help="Resume from an existing benchmark directory"),
 ):
@@ -432,7 +439,8 @@ def benchmark(
         start_index = 1
         completed_rows = []
 
-        label = "images (post-check)" if use_source_dir else f"prompts ('{mode}' mode)"
+        mode_label = mode or "settings.py"
+        label = "images (post-check)" if use_source_dir else f"prompts ('{mode_label}' mode)"
         console.print(f"[bold]Running {len(all_items)} {label}[/bold]")
         console.print(f"[dim]Output → {benchmark_dir}[/dim]\n")
 
@@ -572,7 +580,8 @@ def _print_result(r: PipelineResult) -> None:
     if r.clip_result:
         if r.clip_result.triggered_concepts:
             lines.append(f"CLIP Triggered: {', '.join(r.clip_result.triggered_concepts)}")
-        lines.append(f"CLIP Max Similarity: {r.clip_result.max_similarity:.3f}")
+        top_concept = f" ({r.clip_result.matched_concept})" if r.clip_result.matched_concept else ""
+        lines.append(f"CLIP Max Similarity: {r.clip_result.max_similarity:.3f}{top_concept}")
 
     if r.decision.value == "safe":
         if r.output_path:

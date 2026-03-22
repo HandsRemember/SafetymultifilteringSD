@@ -90,7 +90,7 @@ class PipelineConfig(BaseModel):
     # Stage toggles — her biri bağımsız olarak açılıp kapatılabilir
     enable_pre_check: bool = True       # SafetyAgent LLM pre-check
     enable_coca: bool = True            # CoCa captioning + re-check
-    enable_clip: bool = False           # CLIP similarity check (default kapalı, True yapınca aktif)
+    enable_clip: bool = True           # CLIP similarity check (default kapalı, True yapınca aktif)
     enable_nudenet: bool = True         # NudeNet nudity detection
     enable_vlm: bool = True             # VLM semantic analysis
     
