@@ -1,4 +1,5 @@
 # NSFW Safety Filtering Pipeline for Stable Diffusion
+[Thesis PDF](https://tez.yok.gov.tr/UlusalTezMerkezi/TezGoster?key=5T1_CZ5-UGb9QCmoURec4NVDHdxrnA_5QZLhDv015dje5s2FuYleeGScurX2CYYr)
 
 A multi-layered safety filtering framework for text-to-image generation, implementing a **Defense-in-Depth** architecture. This project is part of a Master's thesis on **NSFW Detection and Text Filtering for Safe Diffusions: A Turkish Language Approach**.
 
